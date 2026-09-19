@@ -1,19 +1,25 @@
-import hashlib
+import imagehash
+from PIL import Image
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
+def check_script_similarity(new_transcript, existing_transcripts_list, threshold=0.85):
+    """
+    Compares TF-IDF text vectors locally to detect plagiarized scripts.
+    """
+    if not existing_transcripts_list:
+        return False, 0.0
 
-def get_file_hash(file_path):
+    documents = existing_transcripts_list + [new_transcript]
+    vectorizer = TfidfVectorizer().fit_transform(documents)
+    vectors = vectorizer.toarray()
 
-    hash_object = hashlib.sha256()
+    # Compare last document (new_transcript) against all previous ones
+    new_vec = vectors[-1].reshape(1, -1)
+    past_vecs = vectors[:-1]
+    
+    similarities = cosine_similarity(new_vec, past_vecs)[0]
+    max_similarity = float(max(similarities)) if len(similarities) > 0 else 0.0
 
-    with open(file_path, "rb") as file:
-
-        while True:
-
-            chunk = file.read(4096)
-
-            if not chunk:
-                break
-
-            hash_object.update(chunk)
-
-    return hash_object.hexdigest()
+    is_duplicate = max_similarity >= threshold
+    return is_duplicate, round(max_similarity * 100, 2)
