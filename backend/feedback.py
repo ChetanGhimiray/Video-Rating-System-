@@ -1,46 +1,22 @@
-def generate_feedback(
-    fluency,
-    eye_contact,
-    structure,
-    overall
-):
-
-    feedback = []
-
-    if fluency >= 80:
-        feedback.append(
-            "Good speaking fluency."
-        )
+def generate_feedback(metrics, scores):
+    """
+    Generates structured strengths and weaknesses based on metric bounds.
+    """
+    feedback = {"strengths": [], "weaknesses": []}
+    
+    # Eye contact check
+    if metrics["visual_metrics"]["eye_contact_percentage"] >= 75:
+        feedback["strengths"].append("Maintained excellent eye contact with the camera throughout the speech.")
     else:
-        feedback.append(
-            "Work on speaking fluency and reduce long pauses."
-        )
+        feedback["weaknesses"].append("Eye contact was low; spent significant time looking away or reading off notes.")
 
-    if eye_contact >= 80:
-        feedback.append(
-            "Good audience engagement."
-        )
+    # WPM check
+    wpm = metrics["fluency_metrics"]["wpm"]
+    if 130 <= wpm <= 150:
+        feedback["strengths"].append("Speech tempo was well-balanced and natural.")
+    elif wpm > 150:
+        feedback["weaknesses"].append(f"Pacing was slightly fast ({int(wpm)} WPM). Some words may sound rushed.")
     else:
-        feedback.append(
-            "Try to maintain more eye contact with the audience."
-        )
-
-    if structure >= 80:
-        feedback.append(
-            "Presentation structure is good."
-        )
-    else:
-        feedback.append(
-            "Improve the organization of your presentation."
-        )
-
-    if overall >= 80:
-        feedback.append(
-            "Overall performance is strong."
-        )
-    else:
-        feedback.append(
-            "Continue practicing to improve overall performance."
-        )
+        feedback["weaknesses"].append(f"Pacing was slow ({int(wpm)} WPM), which can reduce audience engagement.")
 
     return feedback
