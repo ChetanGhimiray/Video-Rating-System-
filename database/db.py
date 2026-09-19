@@ -1,194 +1,81 @@
-import sqlite3
-import os
+CREATE DATABASE video_grading_system;
+
+USE video_grading_system;
 
 
-DATABASE = "database/presentation.db"
+-- =========================================
+-- 1. VIDEO SUBMISSIONS
+-- =========================================
+
+CREATE TABLE video_submissions (
+    video_id INT AUTO_INCREMENT PRIMARY KEY,
+    video_name VARCHAR(255) NOT NULL,
+    video_path VARCHAR(500),
+    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    duration_seconds DECIMAL(10,2),
+    status VARCHAR(50) DEFAULT 'Pending'
+);
 
 
-def get_connection():
-    connection = sqlite3.connect(DATABASE)
-    connection.row_factory = sqlite3.Row
-    return connection
+-- =========================================
+-- 2. SPEAKERS
+-- =========================================
+
+CREATE TABLE speakers (
+    speaker_id INT AUTO_INCREMENT PRIMARY KEY,
+    video_id INT NOT NULL,
+    speaker_name VARCHAR(150),
+    speaker_label VARCHAR(50),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (video_id)
+        REFERENCES video_submissions(video_id)
+        ON DELETE CASCADE
+);
 
 
-def create_database():
+-- =========================================
+-- 3. ASSESSMENT RESULTS
+-- =========================================
 
-    os.makedirs("database", exist_ok=True)
+CREATE TABLE assessment_results (
+    assessment_id INT AUTO_INCREMENT PRIMARY KEY,
+    video_id INT NOT NULL,
+    speaker_id INT,
 
-    connection = get_connection()
+    fluency_score DECIMAL(5,2),
+    eye_contact_score DECIMAL(5,2),
+    pronunciation_score DECIMAL(5,2),
+    confidence_score DECIMAL(5,2),
 
-    cursor = connection.cursor()
+    assessment_time DATETIME DEFAULT CURRENT_TIMESTAMP,
 
-    # Students table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT UNIQUE NOT NULL,
-            name TEXT NOT NULL
-        )
-    """)
+    FOREIGN KEY (video_id)
+        REFERENCES video_submissions(video_id)
+        ON DELETE CASCADE,
 
-    # Presentations table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS presentations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            student_id TEXT NOT NULL,
-
-            presentation_number INTEGER NOT NULL,
-
-            video_name TEXT NOT NULL,
-
-            video_hash TEXT,
-
-            duration REAL,
-
-            speaker_score REAL,
-            fluency_score REAL,
-            eye_contact_score REAL,
-            structure_score REAL,
-
-            overall_score REAL,
-
-            feedback TEXT,
-
-            upload_date TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    connection.commit()
-    connection.close()
+    FOREIGN KEY (speaker_id)
+        REFERENCES speakers(speaker_id)
+        ON DELETE SET NULL
+);
 
 
-def add_student(student_id, name):
+-- =========================================
+-- 4. FINAL RESULTS
+-- =========================================
 
-    connection = get_connection()
-    cursor = connection.cursor()
+CREATE TABLE final_results (
+    result_id INT AUTO_INCREMENT PRIMARY KEY,
+    video_id INT NOT NULL,
 
-    cursor.execute("""
-        INSERT OR IGNORE INTO students
-        (student_id, name)
-        VALUES (?, ?)
-    """, (student_id, name))
+    overall_score DECIMAL(5,2),
+    grade VARCHAR(10),
+    performance_level VARCHAR(50),
+    feedback TEXT,
 
-    connection.commit()
-    connection.close()
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
-
-def get_student(student_id):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT *
-        FROM students
-        WHERE student_id = ?
-    """, (student_id,))
-
-    student = cursor.fetchone()
-
-    connection.close()
-
-    return student
-
-
-def get_next_presentation_number(student_id):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT MAX(presentation_number)
-        FROM presentations
-        WHERE student_id = ?
-    """, (student_id,))
-
-    result = cursor.fetchone()
-
-    connection.close()
-
-    if result[0] is None:
-        return 1
-
-    return result[0] + 1
-
-
-def add_presentation(data):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        INSERT INTO presentations
-        (
-            student_id,
-            presentation_number,
-            video_name,
-            video_hash,
-            duration,
-            speaker_score,
-            fluency_score,
-            eye_contact_score,
-            structure_score,
-            overall_score,
-            feedback
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        data["student_id"],
-        data["presentation_number"],
-        data["video_name"],
-        data["video_hash"],
-        data["duration"],
-        data["speaker_score"],
-        data["fluency_score"],
-        data["eye_contact_score"],
-        data["structure_score"],
-        data["overall_score"],
-        data["feedback"]
-    ))
-
-    presentation_id = cursor.lastrowid
-
-    connection.commit()
-    connection.close()
-
-    return presentation_id
-
-
-def get_presentations(student_id):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT *
-        FROM presentations
-        WHERE student_id = ?
-        ORDER BY presentation_number ASC
-    """, (student_id,))
-
-    presentations = cursor.fetchall()
-
-    connection.close()
-
-    return presentations
-
-
-def get_presentation(presentation_id):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT *
-        FROM presentations
-        WHERE id = ?
-    """, (presentation_id,))
-
-    presentation = cursor.fetchone()
-
-    connection.close()
-
-    return presentation
+    FOREIGN KEY (video_id)
+        REFERENCES video_submissions(video_id)
+        ON DELETE CASCADE
+);
