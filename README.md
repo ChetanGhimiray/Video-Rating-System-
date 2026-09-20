@@ -1,0 +1,2 @@
+This project is made in order to analysis and score the way a person is speaking.
+It checks the fluency and the posture of the speaker in the video and accordingly gives them score, through these score tips and feedbacks would be provided. 
