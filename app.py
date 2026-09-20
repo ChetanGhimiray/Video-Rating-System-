@@ -1,411 +1,344 @@
 from flask import (
     Flask,
-    render_template,
     request,
-    redirect,
-    url_for
+    render_template
 )
 
 import os
 
-from database.db import (
-    create_database,
-    add_student,
-    get_student,
-    get_next_presentation_number,
-    add_presentation,
-    get_presentations,
-    get_presentation
+from input import (
+    allowed_file,
+    get_safe_filename,
+    is_url
 )
 
-from backend.video_reader import read_video
-
-from backend.duplicate_detector import (
-    get_file_hash
+from video_reader import (
+    download_video,
+    extract_audio
 )
 
-from backend.speaker_recognition import (
-    recognize_speaker
-)
-
-from backend.fluency_analysis import (
-    analyze_fluency
-)
-
-from backend.eye_contact import (
-    analyze_eye_contact
-)
-
-from backend.scoring import (
-    calculate_overall
-)
-
-from backend.feedback import (
-    generate_feedback
-)
-
-from backend.improvement import (
-    calculate_improvement,
-    calculate_average
+from database.database import (
+    initialize_database,
+    save_result
 )
 
 
 app = Flask(__name__)
 
 
-UPLOAD_FOLDER = "uploads/videos"
-
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+UPLOAD_FOLDER = "uploads"
+PROCESSED_FOLDER = "processed"
 
 
-create_database()
+os.makedirs(
+    UPLOAD_FOLDER,
+    exist_ok=True
+)
+
+os.makedirs(
+    PROCESSED_FOLDER,
+    exist_ok=True
+)
 
 
-# ------------------------------------------------
+# --------------------------------------------------
+# DATABASE
+# --------------------------------------------------
+
+initialize_database()
+
+
+# --------------------------------------------------
 # HOME
-# ------------------------------------------------
+# --------------------------------------------------
 
 @app.route("/")
 def index():
 
-    return render_template("index.html")
-
-
-# ------------------------------------------------
-# STUDENT PAGE
-# ------------------------------------------------
-
-@app.route("/student", methods=["GET", "POST"])
-def student():
-
-    if request.method == "POST":
-
-        student_id = request.form["student_id"]
-
-        name = request.form["name"]
-
-        add_student(
-            student_id,
-            name
-        )
-
-        return redirect(
-            url_for(
-                "student_profile",
-                student_id=student_id
-            )
-        )
-
     return render_template(
-        "student.html"
+        "index.html"
     )
 
 
-# ------------------------------------------------
-# STUDENT PROFILE
-# ------------------------------------------------
-
-@app.route("/student/<student_id>")
-def student_profile(student_id):
-
-    student_data = get_student(student_id)
-
-    if not student_data:
-
-        return "Student not found"
-
-    presentations = get_presentations(
-        student_id
-    )
-
-    average = calculate_average(
-        presentations
-    )
-
-    improvement = calculate_improvement(
-        presentations
-    )
-
-    return render_template(
-        "progress.html",
-        student=student_data,
-        presentations=presentations,
-        average=average,
-        improvement=improvement
-    )
-
-
-# ------------------------------------------------
-# UPLOAD PAGE
-# ------------------------------------------------
-
-@app.route("/upload/<student_id>")
-def upload(student_id):
-
-    student_data = get_student(student_id)
-
-    if not student_data:
-
-        return "Student not found"
-
-    next_number = get_next_presentation_number(
-        student_id
-    )
-
-    return render_template(
-        "upload.html",
-        student=student_data,
-        presentation_number=next_number
-    )
-
-
-# ------------------------------------------------
-# PROCESS VIDEO
-# ------------------------------------------------
+# --------------------------------------------------
+# UPLOAD / URL
+# --------------------------------------------------
 
 @app.route(
-    "/process/<student_id>",
+    "/upload",
     methods=["POST"]
 )
-def process_video(student_id):
+def upload():
 
-    student_data = get_student(student_id)
+    uploaded_file = request.files.get(
+        "video"
+    )
 
-    if not student_data:
+    video_url = request.form.get(
+        "video_url",
+        ""
+    ).strip()
 
-        return "Student not found"
 
-    video = request.files.get("video")
+    # ----------------------------------------------
+    # CHECK INPUT
+    # ----------------------------------------------
 
-    if not video:
+    if (
+        uploaded_file is None
+        or uploaded_file.filename == ""
+    ) and not video_url:
 
-        return "No video selected"
-
-    if video.filename == "":
-
-        return "Invalid video"
-
-    presentation_number = (
-        get_next_presentation_number(
-            student_id
+        return render_template(
+            "index.html",
+            error="Please upload a video or enter a video URL."
         )
-    )
 
-    filename = video.filename
 
-    video_path = os.path.join(
-        app.config["UPLOAD_FOLDER"],
-        filename
-    )
+    # ----------------------------------------------
+    # OPTION 1: UPLOAD FILE
+    # ----------------------------------------------
 
-    video.save(video_path)
+    if (
+        uploaded_file
+        and uploaded_file.filename
+    ):
 
-    # --------------------------------------------
-    # Read video
-    # --------------------------------------------
+        filename = get_safe_filename(
+            uploaded_file.filename
+        )
 
-    video_information = read_video(
-        video_path
-    )
+        if not allowed_file(filename):
 
-    duration = video_information[
-        "duration"
-    ]
+            return render_template(
+                "index.html",
+                error=(
+                    "Unsupported video format. "
+                    "Use MP4, MOV, AVI, MKV or WebM."
+                )
+            )
 
-    # --------------------------------------------
-    # Duplicate detection
-    # --------------------------------------------
 
-    video_hash = get_file_hash(
-        video_path
-    )
+        video_path = os.path.join(
+            UPLOAD_FOLDER,
+            filename
+        )
 
-    # --------------------------------------------
-    # Speaker
-    # --------------------------------------------
 
-    speaker_result = recognize_speaker(
-        student_id
-    )
+        uploaded_file.save(
+            video_path
+        )
 
-    speaker_score = speaker_result[
-        "speaker_score"
-    ]
 
-    # --------------------------------------------
-    # Fluency
-    # --------------------------------------------
+        source = "Uploaded File"
 
-    fluency_score = analyze_fluency(
-        duration
-    )
 
-    # --------------------------------------------
-    # Eye contact
-    # --------------------------------------------
+    # ----------------------------------------------
+    # OPTION 2: VIDEO URL
+    # ----------------------------------------------
 
-    eye_contact_score = analyze_eye_contact(
-        video_path
-    )
+    elif video_url:
 
-    # --------------------------------------------
-    # Structure
-    # --------------------------------------------
+        if not is_url(video_url):
 
-    structure_score = 80
+            return render_template(
+                "index.html",
+                error="Please enter a valid HTTP/HTTPS URL."
+            )
 
-    # --------------------------------------------
-    # Overall score
-    # --------------------------------------------
 
-    overall_score = calculate_overall(
+        try:
 
-        speaker_score,
+            video_path = download_video(
+                video_url,
+                UPLOAD_FOLDER
+            )
 
-        fluency_score,
+            filename = os.path.basename(
+                video_path
+            )
 
-        eye_contact_score,
+            source = video_url
 
-        structure_score
-    )
 
-    # --------------------------------------------
-    # Feedback
-    # --------------------------------------------
+        except Exception as error:
 
-    feedback_list = generate_feedback(
+            return render_template(
+                "index.html",
+                error=f"Video download failed: {error}"
+            )
 
-        fluency_score,
 
-        eye_contact_score,
+    # ----------------------------------------------
+    # EXTRACT AUDIO
+    # ----------------------------------------------
 
-        structure_score,
+    try:
 
-        overall_score
-    )
+        audio_path = extract_audio(
+            video_path,
+            PROCESSED_FOLDER
+        )
 
-    feedback = "\n".join(
-        feedback_list
-    )
+    except Exception as error:
 
-    # --------------------------------------------
-    # Save to database
-    # --------------------------------------------
+        return render_template(
+            "index.html",
+            error=f"Audio extraction failed: {error}"
+        )
 
-    presentation_data = {
 
-        "student_id":
-            student_id,
+    # =================================================
+    # MEMBER 1
+    # =================================================
 
-        "presentation_number":
-            presentation_number,
+    # TEMPORARY DATA
+    #
+    # We will replace this with:
+    #
+    # from fluency_analysis import analyze_audio
+    #
+    # fluency_data = analyze_audio(audio_path)
 
-        "video_name":
-            filename,
+    fluency_data = {
 
-        "video_hash":
-            video_hash,
+        "wpm": 0,
 
-        "duration":
-            duration,
+        "filler_count": 0,
 
-        "speaker_score":
-            speaker_score,
+        "pause_count": 0,
 
-        "fluency_score":
-            fluency_score,
+        "transcript": ""
 
-        "eye_contact_score":
-            eye_contact_score,
-
-        "structure_score":
-            structure_score,
-
-        "overall_score":
-            overall_score,
-
-        "feedback":
-            feedback
     }
 
-    presentation_id = add_presentation(
-        presentation_data
+
+    # =================================================
+    # MEMBER 2
+    # =================================================
+
+    # TEMPORARY DATA
+    #
+    # We will replace this with the actual
+    # eye_contact.py and speaker_recognition.py
+
+    visual_data = {
+
+        "eye_contact_percentage": 0,
+
+        "face_detected_ratio": 0
+
+    }
+
+
+    # =================================================
+    # COMBINE MEMBER 1 + MEMBER 2
+    # =================================================
+
+    processed_data = {
+
+        "visual_metrics": visual_data,
+
+        "fluency_metrics": fluency_data
+
+    }
+
+
+    # =================================================
+    # MEMBER 3
+    # =================================================
+
+    # TEMPORARY SCORE
+    #
+    # Later:
+    #
+    # score = calculate_score(processed_data)
+
+    final_score = 0
+
+
+    feedback = []
+
+
+    # =================================================
+    # DATABASE
+    # =================================================
+
+    database_data = {
+
+        "video_filename": filename,
+
+        "video_source": source,
+
+        "wpm":
+            fluency_data["wpm"],
+
+        "filler_count":
+            fluency_data["filler_count"],
+
+        "pause_count":
+            fluency_data["pause_count"],
+
+        "eye_contact_percentage":
+            visual_data[
+                "eye_contact_percentage"
+            ],
+
+        "face_detected_ratio":
+            visual_data[
+                "face_detected_ratio"
+            ],
+
+        "final_score":
+            final_score,
+
+        "transcript":
+            fluency_data["transcript"],
+
+        "feedback":
+            "\n".join(feedback)
+
+    }
+
+
+    submission_id = save_result(
+        database_data
     )
 
-    return redirect(
-        url_for(
-            "result",
-            presentation_id=presentation_id
-        )
-    )
 
-
-# ------------------------------------------------
-# RESULT
-# ------------------------------------------------
-
-@app.route("/result/<int:presentation_id>")
-def result(presentation_id):
-
-    presentation = get_presentation(
-        presentation_id
-    )
-
-    if not presentation:
-
-        return "Presentation not found"
+    # =================================================
+    # RESULT
+    # =================================================
 
     return render_template(
+
         "result.html",
-        presentation=presentation
+
+        data=processed_data,
+
+        score=final_score,
+
+        feedback=feedback,
+
+        submission_id=submission_id,
+
+        video_filename=filename,
+
+        video_source=source,
+
+        audio_path=audio_path
+
     )
 
 
-# ------------------------------------------------
-# OVERALL PERFORMANCE
-# ------------------------------------------------
-
-@app.route("/overall/<student_id>")
-def overall(student_id):
-
-    student_data = get_student(
-        student_id
-    )
-
-    if not student_data:
-
-        return "Student not found"
-
-    presentations = get_presentations(
-        student_id
-    )
-
-    average = calculate_average(
-        presentations
-    )
-
-    improvement = calculate_improvement(
-        presentations
-    )
-
-    return render_template(
-        "overall.html",
-        student=student_data,
-        presentations=presentations,
-        average=average,
-        improvement=improvement
-    )
-
-
-# ------------------------------------------------
+# --------------------------------------------------
 # RUN
-# ------------------------------------------------
+# --------------------------------------------------
 
 if __name__ == "__main__":
 
     app.run(
-        debug=True
+        debug=True,
+        host="127.0.0.1",
+        port=5000
     )
