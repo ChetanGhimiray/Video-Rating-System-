@@ -1,81 +1,106 @@
-CREATE DATABASE video_grading_system;
-
-USE video_grading_system;
-
-
--- =========================================
--- 1. VIDEO SUBMISSIONS
--- =========================================
-
-CREATE TABLE video_submissions (
-    video_id INT AUTO_INCREMENT PRIMARY KEY,
-    video_name VARCHAR(255) NOT NULL,
-    video_path VARCHAR(500),
-    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    duration_seconds DECIMAL(10,2),
-    status VARCHAR(50) DEFAULT 'Pending'
-);
+import sqlite3
+import os
 
 
--- =========================================
--- 2. SPEAKERS
--- =========================================
-
-CREATE TABLE speakers (
-    speaker_id INT AUTO_INCREMENT PRIMARY KEY,
-    video_id INT NOT NULL,
-    speaker_name VARCHAR(150),
-    speaker_label VARCHAR(50),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (video_id)
-        REFERENCES video_submissions(video_id)
-        ON DELETE CASCADE
-);
+DATABASE_PATH = "database/video_rating.db"
 
 
--- =========================================
--- 3. ASSESSMENT RESULTS
--- =========================================
+def get_connection():
 
-CREATE TABLE assessment_results (
-    assessment_id INT AUTO_INCREMENT PRIMARY KEY,
-    video_id INT NOT NULL,
-    speaker_id INT,
+    os.makedirs("database", exist_ok=True)
 
-    fluency_score DECIMAL(5,2),
-    eye_contact_score DECIMAL(5,2),
-    pronunciation_score DECIMAL(5,2),
-    confidence_score DECIMAL(5,2),
+    connection = sqlite3.connect(
+        DATABASE_PATH
+    )
 
-    assessment_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    connection.row_factory = sqlite3.Row
 
-    FOREIGN KEY (video_id)
-        REFERENCES video_submissions(video_id)
-        ON DELETE CASCADE,
-
-    FOREIGN KEY (speaker_id)
-        REFERENCES speakers(speaker_id)
-        ON DELETE SET NULL
-);
+    return connection
 
 
--- =========================================
--- 4. FINAL RESULTS
--- =========================================
+def initialize_database():
 
-CREATE TABLE final_results (
-    result_id INT AUTO_INCREMENT PRIMARY KEY,
-    video_id INT NOT NULL,
+    connection = get_connection()
 
-    overall_score DECIMAL(5,2),
-    grade VARCHAR(10),
-    performance_level VARCHAR(50),
-    feedback TEXT,
+    cursor = connection.cursor()
 
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS submissions (
 
-    FOREIGN KEY (video_id)
-        REFERENCES video_submissions(video_id)
-        ON DELETE CASCADE
-);
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            video_filename TEXT NOT NULL,
+
+            video_source TEXT,
+
+            wpm REAL,
+
+            filler_count INTEGER,
+
+            pause_count INTEGER,
+
+            eye_contact_percentage REAL,
+
+            face_detected_ratio REAL,
+
+            final_score REAL,
+
+            transcript TEXT,
+
+            feedback TEXT,
+
+            created_at TIMESTAMP
+                DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    connection.commit()
+
+    connection.close()
+
+
+def save_result(data):
+
+    connection = get_connection()
+
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO submissions (
+
+            video_filename,
+            video_source,
+            wpm,
+            filler_count,
+            pause_count,
+            eye_contact_percentage,
+            face_detected_ratio,
+            final_score,
+            transcript,
+            feedback
+
+        )
+
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+
+        data["video_filename"],
+        data["video_source"],
+        data["wpm"],
+        data["filler_count"],
+        data["pause_count"],
+        data["eye_contact_percentage"],
+        data["face_detected_ratio"],
+        data["final_score"],
+        data["transcript"],
+        data["feedback"]
+
+    ))
+
+    connection.commit()
+
+    submission_id = cursor.lastrowid
+
+    connection.close()
+
+    return submission_id
