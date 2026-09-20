@@ -1,38 +1,34 @@
-import cv2
+import os
 
 
-def read_video(video_path):
+ALLOWED_EXTENSIONS = {
+    "mp4",
+    "avi",
+    "mov",
+    "mkv"
+}
 
-    video = cv2.VideoCapture(video_path)
 
-    if not video.isOpened():
-        raise Exception("Unable to open video")
+def allowed_file(filename):
+    """
+    Check whether uploaded file has an allowed extension.
+    """
 
-    fps = video.get(cv2.CAP_PROP_FPS)
+    if not filename:
+        return False
 
-    frame_count = video.get(
-        cv2.CAP_PROP_FRAME_COUNT
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower()
+        in ALLOWED_EXTENSIONS
     )
 
-    width = int(
-        video.get(cv2.CAP_PROP_FRAME_WIDTH)
-    )
 
-    height = int(
-        video.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    )
+def get_safe_filename(filename):
+    """
+    Create a simple safe filename.
+    """
 
-    if fps > 0:
-        duration = frame_count / fps
-    else:
-        duration = 0
+    filename = os.path.basename(filename)
 
-    video.release()
-
-    return {
-        "fps": fps,
-        "frames": frame_count,
-        "duration": duration,
-        "width": width,
-        "height": height
-    }
+    return filename.replace(" ", "_")
