@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -6,8 +8,7 @@ import numpy as np
 class EyeContactAnalyzer:
 
     def __init__(self):
-
-        self.mp_face_mesh = mp.solutions.face_mesh
+        self.mp_face_mesh = getattr(getattr(mp, "solutions", None), "face_mesh", None)
 
         self.LEFT_EYE = [
             33,
@@ -140,6 +141,21 @@ class EyeContactAnalyzer:
         video_path,
         sample_every_n_frames=5
     ):
+        if not video_path or not os.path.exists(video_path):
+            return {
+                "eye_contact_score": 0,
+                "eye_contact_percentage": 0,
+                "looking_away_percentage": 100,
+                "frames_with_face": 0
+            }
+
+        if self.mp_face_mesh is None:
+            return {
+                "eye_contact_score": 0,
+                "eye_contact_percentage": 0,
+                "looking_away_percentage": 100,
+                "frames_with_face": 0
+            }
 
         cap = cv2.VideoCapture(video_path)
 

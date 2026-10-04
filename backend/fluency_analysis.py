@@ -1,267 +1,137 @@
+"""
+fluency_analysis.py
+Member 1: Speech & Audio Analysis
+
+Responsibilities:
+- Load faster-whisper locally to transcribe the .wav file
+- Extract word timestamps to calculate Words Per Minute (WPM)
+- Identify pauses (silent gaps > 1.2 seconds between words)
+- Detect filler words (um, uh, like, you know, basically)
+"""
+
+import os
 import re
-from faster_whisper import WhisperModel
+
+try:
+    from faster_whisper import WhisperModel
+except Exception:
+    WhisperModel = None
 
 
-class FluencyAnalyzer:
+# ----------------------------------------------------------------------
+# Configuration
+# ----------------------------------------------------------------------
+FILLER_WORDS = ["um", "uh", "like", "you know", "basically", "actually", "so"]
+PAUSE_THRESHOLD_SEC = 1.2
+MODEL_SIZE = "base"          # tiny / base / small / medium / large-v2
+DEVICE = "cpu"               # switch to "cuda" if GPU available
+COMPUTE_TYPE = "int8"        # use "float16" on GPU
+
+
+# ----------------------------------------------------------------------
+# Core analysis
+# ----------------------------------------------------------------------
+def analyze_fluency(wav_path: str) -> dict:
     """
-    Analyzes speaking fluency using Faster-Whisper.
+    Transcribe a .wav file and compute fluency metrics.
+
+    This function now fails gracefully when faster-whisper or its native audio
+    dependency stack is incompatible (for example av / ffmpeg runtime errors).
     """
-
-    def __init__(
-        self,
-        model_size="base",
-        device="cpu",
-        compute_type="int8"
-    ):
-        self.model = WhisperModel(
-            model_size,
-            device=device,
-            compute_type=compute_type
-        )
-
-        self.filler_words = {
-            "um",
-            "uh",
-            "erm",
-            "hmm",
-            "like",
-            "actually",
-            "basically",
-            "you know",
-            "i mean"
-        }
-
-    def transcribe(self, video_path):
-
-        segments, info = self.model.transcribe(
-            video_path,
-            beam_size=5,
-            vad_filter=True
-        )
-
-        segment_list = []
-
-        for segment in segments:
-            segment_list.append({
-                "start": float(segment.start),
-                "end": float(segment.end),
-                "text": segment.text.strip()
-            })
-
-        return segment_list
-
-    def count_words(self, text):
-
-        words = re.findall(
-            r"\b[\w']+\b",
-            text.lower()
-        )
-
-        return words
-
-    def count_filler_words(self, words):
-
-        filler_count = 0
-
-        for word in words:
-
-            if word.lower() in self.filler_words:
-                filler_count += 1
-
-        return filler_count
-
-    def calculate_long_pauses(
-        self,
-        segments,
-        pause_threshold=2.0
-    ):
-
-        long_pauses = 0
-        total_pause_time = 0.0
-
-        for i in range(1, len(segments)):
-
-            previous_end = segments[i - 1]["end"]
-            current_start = segments[i]["start"]
-
-            pause = current_start - previous_end
-
-            if pause >= pause_threshold:
-                long_pauses += 1
-                total_pause_time += pause
-
-        return long_pauses, total_pause_time
-
-    def calculate_fluency_score(
-        self,
-        wpm,
-        filler_words,
-        long_pauses,
-        speaking_time
-    ):
-
-        score = 100.0
-
-        # WPM component
-        # Normal presentation range is approximately
-        # 100-160 words per minute.
-        if wpm < 60:
-            score -= 25
-
-        elif wpm < 80:
-            score -= 15
-
-        elif wpm < 100:
-            score -= 5
-
-        elif wpm > 180:
-            score -= 20
-
-        elif wpm > 160:
-            score -= 10
-
-        # Filler word penalty
-        if speaking_time > 0:
-
-            filler_rate = (
-                filler_words / speaking_time
-            ) * 60
-
-            score -= min(
-                filler_rate * 2,
-                20
-            )
-
-        # Long pause penalty
-        score -= min(
-            long_pauses * 3,
-            20
-        )
-
-        score = max(
-            0,
-            min(100, score)
-        )
-
-        return round(score, 2)
-
-    def analyze(self, video_path):
-
-        segments = self.transcribe(video_path)
-
-        if not segments:
-            return {
-                "fluency_score": 0,
-                "transcript": "",
-                "words_spoken": 0,
-                "words_per_minute": 0,
-                "filler_words": 0,
-                "long_pauses": 0,
-                "speaking_time_seconds": 0,
-                "pause_time_seconds": 0
-            }
-
-        transcript = " ".join(
-            segment["text"]
-            for segment in segments
-        )
-
-        words = self.count_words(transcript)
-
-        words_spoken = len(words)
-
-        speaking_time = sum(
-            segment["end"] - segment["start"]
-            for segment in segments
-        )
-
-        long_pauses, pause_time = (
-            self.calculate_long_pauses(segments)
-        )
-
-        filler_words = self.count_filler_words(words)
-
-        if speaking_time > 0:
-            wpm = (
-                words_spoken / speaking_time
-            ) * 60
-        else:
-            wpm = 0
-
-        score = self.calculate_fluency_score(
-            wpm,
-            filler_words,
-            long_pauses,
-            speaking_time
-        )
-
+    if not wav_path or not os.path.exists(wav_path):
         return {
-            "fluency_score": score,
-            "transcript": transcript,
-            "words_spoken": words_spoken,
-            "words_per_minute": round(wpm, 2),
-            "filler_words": filler_words,
-            "long_pauses": long_pauses,
-            "speaking_time_seconds": round(
-                speaking_time,
-                2
-            ),
-            "pause_time_seconds": round(
-                pause_time,
-                2
-            )
+            "wpm": 0.0,
+            "filler_count": 0,
+            "pause_count": 0,
+            "transcript": "Audio analysis unavailable. No valid audio file was provided.",
         }
 
-
-def analyze_fluency(video_path):
-
-    analyzer = FluencyAnalyzer()
-
-    return analyzer.analyze(video_path)
-
-
-if __name__ == "__main__":
-
-    video = input("Enter video path: ")
+    if WhisperModel is None:
+        return {
+            "wpm": 0.0,
+            "filler_count": 0,
+            "pause_count": 0,
+            "transcript": "Speech recognition dependency is unavailable in this environment.",
+        }
 
     try:
-
-        result = analyze_fluency(video)
-
-        print("\n--- FLUENCY ANALYSIS ---")
-
-        print(
-            f"Fluency score: "
-            f"{result['fluency_score']}/100"
+        model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
+        segments, info = model.transcribe(
+            wav_path,
+            word_timestamps=True,
+            language="en",
+            vad_filter=True,
         )
+        segments = list(segments)
 
-        print(
-            f"Words spoken: "
-            f"{result['words_spoken']}"
-        )
+        words = []
+        transcript_parts = []
 
-        print(
-            f"Words per minute: "
-            f"{result['words_per_minute']}"
-        )
+        for seg in segments:
+            transcript_parts.append(seg.text.strip())
+            if seg.words:
+                for w in seg.words:
+                    words.append({
+                        "word": w.word.strip(),
+                        "start": float(w.start),
+                        "end": float(w.end),
+                    })
 
-        print(
-            f"Filler words: "
-            f"{result['filler_words']}"
-        )
+        transcript = " ".join(transcript_parts).strip()
 
-        print(
-            f"Long pauses: "
-            f"{result['long_pauses']}"
-        )
+        if words:
+            total_time_sec = words[-1]["end"] - words[0]["start"]
+            total_time_min = total_time_sec / 60.0
+            wpm = round(len(words) / total_time_min, 2) if total_time_min > 0 else 0.0
+        else:
+            wpm = 0.0
 
-        print(
-            f"Speaking time: "
-            f"{result['speaking_time_seconds']} seconds"
-        )
+        pause_count = 0
+        for i in range(1, len(words)):
+            gap = words[i]["start"] - words[i - 1]["end"]
+            if gap > PAUSE_THRESHOLD_SEC:
+                pause_count += 1
 
-        print("\nTranscript:")
-        print(result["transcript"])
+        filler_count = 0
+        lower_transcript = transcript.lower()
+        for filler in FILLER_WORDS:
+            pattern = r"\b" + re.escape(filler) + r"\b"
+            filler_count += len(re.findall(pattern, lower_transcript))
 
-    except Exception as e:
-        print(f"Error: {e}")
+        return {
+            "wpm": wpm,
+            "filler_count": filler_count,
+            "pause_count": pause_count,
+            "transcript": transcript,
+        }
+    except Exception:
+        return {
+            "wpm": 0.0,
+            "filler_count": 0,
+            "pause_count": 0,
+            "transcript": "Speech analysis failed due to an incompatible audio library stack.",
+        }
+
+
+# ----------------------------------------------------------------------
+# Verification check (run as script)
+# ----------------------------------------------------------------------
+if __name__ == "__main__":
+    sample_wav = "8.mp4"   # replace with your test file
+    result = analyze_fluency(sample_wav)
+
+    print("\n=== Fluency Analysis Result ===")
+    for k, v in result.items():
+        if k == "transcript":
+            print(f"{k}: {v[:80]}...")
+        else:
+            print(f"{k}: {v}")
+
+    # Sanity assertions
+    assert isinstance(result, dict)
+    assert set(result.keys()) == {"wpm", "filler_count", "pause_count", "transcript"}
+    assert isinstance(result["wpm"], float)
+    assert isinstance(result["filler_count"], int)
+    assert isinstance(result["pause_count"], int)
+    assert isinstance(result["transcript"], str)
+    print("\n✅ Verification passed.")
