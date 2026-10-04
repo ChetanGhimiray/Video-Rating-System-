@@ -1,0 +1,24 @@
+[33m92737a7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m my changes D
+[33m47b9d09[m Initial commit: Set up project structure and environment
+[33m510c3c3[m Update app.py
+[33m6e73cd2[m Migrate database to SQLite and implement connection methods
+[33m3a6997d[m initial commit: fluency ANalysis
+[33m74f409e[m Refactor video processing logic and add utility functions
+[33ma5cd84e[m Enhance video downloader with extension validation
+[33m9d4af4f[m Refactor video_reader.py with file validation functions
+[33m445e814[m Merge branch 'main' of https://github.com/ChetanGhimiray/Video-Rating-System- .git/MERGE_MSG [unix] (18:52 19/09/2026)                                                                               1,1 All <esktop/Git/Part_2_Video_Analysis_Module/Video-Rating-System-/Video-Rating-System-/.git/MERGE_MSG" [unix] 6L, 304B:wq
+[33mf72ad13[m Update video analysis modules
+[33mb3af9cb[m Revise README to enhance project description
+[33mb7276b0[m Add numpy and imagehash to requirements
+[33m441ce91[m update improvement
+[33mc1bdd40[m update feedback
+[33m04f62c7[m Update scoring logic
+[33m214b9d3[m Update video rating system
+[33m2e0136b[m Initialize MySQL connection in __init__.py
+[33m83ffe43[m Update db.py
+[33m0e7c3f5[m Initial commit: Set up project structure and environment
+[33m0001f3a[m Clean repository layout with single project folder
+[33m86ea9e3[m first commit
+[33m555764a[m first commit
+[33m57b497d[m first commit
+[33mae9c27f[m Initial commit: Add video presentation grading software framework
