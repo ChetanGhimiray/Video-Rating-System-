@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from backend.audio_delivery import analyze_audio_delivery
+from backend.feedback import generate_feedback
 from backend.scoring import calculate_scores
 
 
@@ -65,6 +66,39 @@ class ScoringTests(unittest.TestCase):
             motivational_result["breakdown"]["content_style"],
             lecture_result["breakdown"]["content_style"],
         )
+
+    def test_feedback_references_criteria(self):
+        metrics = {
+            "speaking_style": "motivational",
+            "fluency_metrics": {
+                "transcript": "You can do this. First, focus on your goal. Keep going together.",
+                "wpm": 165,
+                "filler_count": 8,
+            },
+            "audio_delivery_metrics": {
+                "pitch_range_semitones": 3,
+                "intensity_range_db": 5,
+                "pause_ratio": 0.2,
+            },
+            "visual_metrics": {
+                "eye_contact_percentage": 42,
+                "face_detected_ratio": 60,
+            },
+        }
+        scores = {
+            "content_style": 12,
+            "vocal_delivery": 6,
+            "pace": 8,
+            "fluency": 3,
+            "eye_contact": 9,
+            "face_presence": 1,
+        }
+
+        feedback = generate_feedback(metrics, scores)
+
+        self.assertTrue(any("eye contact" in item.lower() for item in feedback))
+        self.assertTrue(any("pace" in item.lower() or "tempo" in item.lower() for item in feedback))
+        self.assertTrue(any("filler" in item.lower() or "fluency" in item.lower() for item in feedback))
 
 
 if __name__ == "__main__":

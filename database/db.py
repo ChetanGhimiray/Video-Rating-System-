@@ -1,11 +1,13 @@
-import os
 import json
+import os
 import sqlite3
+from pathlib import Path
 
 import mysql.connector
 from mysql.connector import Error
 
 
+BASE_DIR = Path(__file__).resolve().parent.parent
 MYSQL_CONFIG = {
     "host": os.getenv("MYSQL_HOST", "localhost"),
     "port": int(os.getenv("MYSQL_PORT", "3306")),
@@ -15,7 +17,7 @@ MYSQL_CONFIG = {
     "autocommit": True,
 }
 
-SQLITE_PATH = "database/video_rating.db"
+SQLITE_PATH = str(BASE_DIR / "database" / "video_rating.db")
 
 SCORING_COLUMNS = {
     "speaking_style": "VARCHAR(32)",
@@ -42,20 +44,22 @@ def get_connection():
     if _mysql_is_available():
         return mysql.connector.connect(**MYSQL_CONFIG)
 
-    os.makedirs("database", exist_ok=True)
+    os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
     connection = sqlite3.connect(SQLITE_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
-def _ensure_scoring_columns(cursor, is_mysql):
+def _column_names(cursor, table_name, is_mysql):
     if is_mysql:
-        cursor.execute("SHOW COLUMNS FROM submissions")
-        existing_columns = {row[0] for row in cursor.fetchall()}
-    else:
-        cursor.execute("PRAGMA table_info(submissions)")
-        existing_columns = {row[1] for row in cursor.fetchall()}
+        cursor.execute(f"SHOW COLUMNS FROM {table_name}")
+        return {row[0] for row in cursor.fetchall()}
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    return {row[1] for row in cursor.fetchall()}
 
+
+def _ensure_scoring_columns(cursor, is_mysql):
+    existing_columns = _column_names(cursor, "submissions", is_mysql)
     for column, column_type in SCORING_COLUMNS.items():
         if column not in existing_columns:
             if not is_mysql and column_type == "DOUBLE":
@@ -65,6 +69,38 @@ def _ensure_scoring_columns(cursor, is_mysql):
             elif not is_mysql and column == "speaking_style":
                 column_type = "TEXT"
             cursor.execute(f"ALTER TABLE submissions ADD COLUMN {column} {column_type}")
+
+
+def _ensure_user_columns(cursor, is_mysql):
+    if is_mysql:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(80) NOT NULL UNIQUE,
+                password_hash VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    else:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    existing_columns = _column_names(cursor, "submissions", is_mysql)
+    if "user_id" not in existing_columns:
+        if is_mysql:
+            cursor.execute("ALTER TABLE submissions ADD COLUMN user_id INT")
+        else:
+            cursor.execute("ALTER TABLE submissions ADD COLUMN user_id INTEGER")
 
 
 def initialize_database():
@@ -77,6 +113,7 @@ def initialize_database():
             """
             CREATE TABLE IF NOT EXISTS submissions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT,
                 video_filename VARCHAR(255) NOT NULL,
                 video_source VARCHAR(255),
                 wpm DOUBLE,
@@ -96,6 +133,7 @@ def initialize_database():
             """
             CREATE TABLE IF NOT EXISTS submissions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 video_filename TEXT NOT NULL,
                 video_source TEXT,
                 wpm REAL,
@@ -111,20 +149,56 @@ def initialize_database():
             """
         )
 
+    _ensure_user_columns(cursor, is_mysql)
     _ensure_scoring_columns(cursor, is_mysql)
     connection.commit()
     connection.close()
+
+
+def create_user(username, password_hash):
+    connection = get_connection()
+    cursor = connection.cursor()
+    is_mysql = not isinstance(connection, sqlite3.Connection)
+    placeholder = "%s" if is_mysql else "?"
+    try:
+        cursor.execute(
+            f"INSERT INTO users (username, password_hash) VALUES ({placeholder}, {placeholder})",
+            (username, password_hash),
+        )
+        connection.commit()
+        return cursor.lastrowid
+    finally:
+        connection.close()
+
+
+def get_user_by_username(username):
+    connection = get_connection()
+    cursor = connection.cursor()
+    is_mysql = not isinstance(connection, sqlite3.Connection)
+    placeholder = "%s" if is_mysql else "?"
+    try:
+        cursor.execute(
+            f"SELECT * FROM users WHERE username = {placeholder}",
+            (username,),
+        )
+        row = cursor.fetchone()
+        return _result_as_dict(cursor, row, is_mysql)
+    finally:
+        connection.close()
 
 
 def save_result(data):
     connection = get_connection()
     cursor = connection.cursor()
     is_mysql = not isinstance(connection, sqlite3.Connection)
+    placeholder = "%s" if is_mysql else "?"
+    user_id = data.get("user_id")
 
     if is_mysql:
         cursor.execute(
-            """
+            f"""
             INSERT INTO submissions (
+                user_id,
                 video_filename,
                 video_source,
                 wpm,
@@ -144,9 +218,10 @@ def save_result(data):
                 vocal_delivery_score,
                 score_breakdown
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
             """,
             (
+                user_id,
                 data["video_filename"],
                 data["video_source"],
                 data["wpm"],
@@ -172,6 +247,7 @@ def save_result(data):
         cursor.execute(
             """
             INSERT INTO submissions (
+                user_id,
                 video_filename,
                 video_source,
                 wpm,
@@ -191,9 +267,10 @@ def save_result(data):
                 vocal_delivery_score,
                 score_breakdown
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                user_id,
                 data["video_filename"],
                 data["video_source"],
                 data["wpm"],
@@ -229,52 +306,63 @@ def _result_as_dict(cursor, row, is_mysql):
     return dict(zip((column[0] for column in cursor.description), row))
 
 
-def get_recent_results(limit=30):
+def get_recent_results(limit=30, user_id=None):
     limit = max(1, min(int(limit), 100))
     connection = get_connection()
     cursor = connection.cursor()
     is_mysql = not isinstance(connection, sqlite3.Connection)
     placeholder = "%s" if is_mysql else "?"
+    query = "SELECT * FROM submissions"
+    params = []
+    if user_id is not None:
+        query += f" WHERE user_id = {placeholder}"
+        params.append(user_id)
+    query += f" ORDER BY id DESC LIMIT {placeholder}"
+    params.append(limit)
     try:
-        cursor.execute(
-            f"SELECT * FROM submissions ORDER BY id DESC LIMIT {placeholder}",
-            (limit,),
-        )
+        cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
         return [_result_as_dict(cursor, row, is_mysql) for row in rows]
     finally:
         connection.close()
 
 
-def get_submission(submission_id):
+def get_submission(submission_id, user_id=None):
     connection = get_connection()
     cursor = connection.cursor()
     is_mysql = not isinstance(connection, sqlite3.Connection)
     placeholder = "%s" if is_mysql else "?"
+    query = "SELECT * FROM submissions WHERE id = " + placeholder
+    params = [submission_id]
+    if user_id is not None:
+        query += " AND user_id = " + placeholder
+        params.append(user_id)
     try:
-        cursor.execute(
-            f"SELECT * FROM submissions WHERE id = {placeholder}",
-            (submission_id,),
-        )
+        cursor.execute(query, tuple(params))
         return _result_as_dict(cursor, cursor.fetchone(), is_mysql)
     finally:
         connection.close()
 
 
-def get_submission_summary():
+def get_submission_summary(user_id=None):
     connection = get_connection()
     cursor = connection.cursor()
+    is_mysql = not isinstance(connection, sqlite3.Connection)
+    placeholder = "%s" if is_mysql else "?"
+    query = """
+        SELECT
+            COUNT(*),
+            AVG(final_score),
+            AVG(eye_contact_percentage),
+            AVG(face_detected_ratio)
+        FROM submissions
+    """
+    params = []
+    if user_id is not None:
+        query += " WHERE user_id = " + placeholder
+        params.append(user_id)
     try:
-        cursor.execute(
-            """
-            SELECT
-                COUNT(*),
-                AVG(final_score),
-                AVG(eye_contact_percentage),
-                AVG(face_detected_ratio)
-            FROM submissions
-            """
-        )
+        cursor.execute(query, tuple(params))
         total, average_score, average_eye_contact, average_face_presence = cursor.fetchone()
         return {
             "total_submissions": total or 0,
@@ -284,3 +372,35 @@ def get_submission_summary():
         }
     finally:
         connection.close()
+
+
+def get_user_improvement(user_id):
+    rows = get_recent_results(limit=10, user_id=user_id)
+    if len(rows) < 2:
+        return {
+            "status": "No trend yet",
+            "message": "Submit a few more videos to see whether you are improving.",
+            "change": 0,
+        }
+
+    first_score = float(rows[-1].get("final_score") or 0)
+    latest_score = float(rows[0].get("final_score") or 0)
+    change = latest_score - first_score
+
+    if change > 5:
+        return {
+            "status": "Improving",
+            "message": f"Your latest score is {change:.1f} points higher than your earlier review.",
+            "change": change,
+        }
+    if change < -5:
+        return {
+            "status": "Needs attention",
+            "message": f"Your latest score is {abs(change):.1f} points lower than your earlier review.",
+            "change": change,
+        }
+    return {
+        "status": "Stable",
+        "message": "Your performance is holding steady across recent reviews.",
+        "change": change,
+    }

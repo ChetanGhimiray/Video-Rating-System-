@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Presentation Review{% endblock %}
+{% block title %}Video Grader{% endblock %}
 
 {% block content %}
 <section class="page-intro home-intro">
@@ -9,7 +9,11 @@
         <h1>Make the next take<br>your best one.</h1>
         <p class="intro-copy">Review delivery, pacing, fluency, and camera presence across your recorded presentations.</p>
     </div>
-    <a class="button button-primary" href="{{ url_for('upload_page') }}">Start a review <span aria-hidden="true">&#8599;</span></a>
+    {% if logged_in %}
+        <a class="button button-primary" href="{{ url_for('upload_page') }}">Start a review <span aria-hidden="true">&#8599;</span></a>
+    {% else %}
+        <a class="button button-primary" href="{{ url_for('login_page') }}">Login to begin <span aria-hidden="true">&#8599;</span></a>
+    {% endif %}
 </section>
 
 <section class="metric-strip" aria-label="Submission summary">
@@ -19,10 +23,24 @@
     <div class="metric-item"><span class="metric-label">FACE PRESENCE</span><strong>{{ summary.average_face_presence }}<small>%</small></strong></div>
 </section>
 
+{% if logged_in and improvement %}
+<section class="content-section">
+    <div class="section-heading">
+        <div><p class="eyebrow">PROGRESS</p><h2>Improvement track</h2></div>
+    </div>
+    <div class="status-panel">
+        <strong>{{ improvement.status }}</strong>
+        <p>{{ improvement.message }}</p>
+    </div>
+</section>
+{% endif %}
+
 <section class="content-section">
     <div class="section-heading">
         <div><p class="eyebrow">YOUR WORK</p><h2>Recent reviews</h2></div>
-        <a class="text-link" href="{{ url_for('overall') }}">All reviews <span aria-hidden="true">&#8594;</span></a>
+        {% if logged_in %}
+            <a class="text-link" href="{{ url_for('overall') }}">All reviews <span aria-hidden="true">&#8594;</span></a>
+        {% endif %}
     </div>
     {% if recent_submissions %}
     <div class="submission-list">
@@ -36,8 +54,10 @@
         </a>
         {% endfor %}
     </div>
-    {% else %}
+    {% elif logged_in %}
     <div class="empty-state"><p>No reviews yet.</p><a class="text-link" href="{{ url_for('upload_page') }}">Create your first review <span aria-hidden="true">&#8594;</span></a></div>
+    {% else %}
+    <div class="empty-state"><p>Please log in to see your reviews.</p><a class="text-link" href="{{ url_for('login_page') }}">Login now <span aria-hidden="true">&#8594;</span></a></div>
     {% endif %}
 </section>
 {% endblock %}

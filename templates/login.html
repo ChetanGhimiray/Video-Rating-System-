@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<section class="auth-card">
+    <p class="eyebrow">WELCOME BACK</p>
+    <h1>Login</h1>
+    {% if error %}
+        <div class="form-error">{{ error }}</div>
+    {% endif %}
+    <form method="post">
+        <label>
+            Username
+            <input class="text-input" type="text" name="username" required>
+        </label>
+        <label>
+            Password
+            <input class="text-input" type="password" name="password" required>
+        </label>
+        <button class="button button-primary" type="submit">Login</button>
+    </form>
+    <p class="mini-link">Need an account? <a class="text-link" href="{{ url_for('register_page') }}">Register here</a></p>
+</section>
+{% endblock %}

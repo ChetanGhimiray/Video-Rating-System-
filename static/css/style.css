@@ -386,6 +386,76 @@ select:focus-visible {
 	color: var(--muted);
 }
 
+.user-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 7px 10px;
+	border-radius: 999px;
+	background: rgba(23, 103, 78, 0.08);
+	color: var(--green);
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.status-panel {
+	padding: 22px 24px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: rgba(255, 255, 255, 0.7);
+}
+
+.status-panel strong {
+	display: block;
+	margin-bottom: 8px;
+	font-size: 18px;
+	color: var(--green);
+}
+
+.status-panel p {
+	margin-bottom: 0;
+	color: var(--muted);
+}
+
+.auth-card {
+	max-width: 440px;
+	margin: 0 auto;
+	padding: 30px 28px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.7);
+}
+
+.auth-card h1 {
+	margin-bottom: 10px;
+	font-size: 36px;
+}
+
+.auth-card form {
+	display: grid;
+	gap: 16px;
+}
+
+.auth-card label {
+	display: grid;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.auth-card .text-input {
+	padding: 12px 14px;
+}
+
+.auth-card .button {
+	margin-top: 8px;
+}
+
+.auth-card .mini-link {
+	margin-top: 14px;
+	color: var(--muted);
+	font-size: 14px;
+}
+
 .upload-workspace {
 	max-width: 860px;
 	padding: 28px 0 26px;
