@@ -43,11 +43,13 @@
             gap: 8px;
             font-weight: 600;
         }
-        input {
+        input,
+        select {
             padding: 12px 14px;
             border: 1px solid #d1d5db;
             border-radius: 8px;
             font-size: 1rem;
+            background: white;
         }
         .or {
             text-align: center;
@@ -87,6 +89,15 @@
             <label>
                 Video URL
                 <input type="url" name="video_url" placeholder="https://example.com/video.mp4">
+            </label>
+
+            <label>
+                Speaking style
+                <select name="speaking_style" required>
+                    {% for value, style in speaking_styles.items() %}
+                        <option value="{{ value }}" {% if value == 'conversational' %}selected{% endif %}>{{ style.label }}</option>
+                    {% endfor %}
+                </select>
             </label>
 
             <button type="submit">Analyze Video</button>

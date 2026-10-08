@@ -71,6 +71,10 @@
                 <div class="value">{{ score }}</div>
             </div>
             <div class="stat">
+                <div class="label">Speaking Style</div>
+                <div class="value">{{ speaking_style }}</div>
+            </div>
+            <div class="stat">
                 <div class="label">Video</div>
                 <div class="value">{{ video_filename }}</div>
             </div>
@@ -81,11 +85,29 @@
         </div>
 
         <div class="section">
+            <h3>Score Breakdown</h3>
+            <p>Content/style is a transcript cue estimate, not an assessment of factual accuracy or assignment relevance. Voice measures are approximate and recording-dependent.</p>
+            <ul>
+                {% for category, points in score_breakdown.items() %}
+                    <li>{{ category.replace('_', ' ').title() }}: {{ points }} points</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="section">
             <h3>Fluency Metrics</h3>
             <p>WPM: {{ data.fluency_metrics.wpm }}</p>
             <p>Filler Count: {{ data.fluency_metrics.filler_count }}</p>
             <p>Pause Count: {{ data.fluency_metrics.pause_count }}</p>
             <p>Transcript: {{ data.fluency_metrics.transcript or 'No transcript available yet.' }}</p>
+        </div>
+
+        <div class="section">
+            <h3>Vocal Delivery</h3>
+            <p>Pitch variation: {{ data.audio_delivery_metrics.pitch_range_semitones }} semitones</p>
+            <p>Relative intensity variation: {{ data.audio_delivery_metrics.intensity_range_db }} dB</p>
+            <p>Internal pause ratio: {{ (data.audio_delivery_metrics.pause_ratio * 100)|round(1) }}%</p>
+            <p>Pauses over 0.3 seconds: {{ data.audio_delivery_metrics.long_pause_count }}</p>
         </div>
 
         <div class="section">

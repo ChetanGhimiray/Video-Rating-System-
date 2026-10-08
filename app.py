@@ -17,9 +17,10 @@ from backend.video_reader import (
     extract_audio
 )
 from backend.fluency_analysis import analyze_fluency
+from backend.audio_delivery import analyze_audio_delivery
 from backend.eye_contact import analyze_eye_contact
 from backend.speaker_recognition import recognize_speaker
-from backend.scoring import calculate_scores
+from backend.scoring import calculate_scores, SPEAKING_STYLES
 
 from database.db import (
     initialize_database,
@@ -28,36 +29,6 @@ from database.db import (
 
 
 app = Flask(__name__)
-
-
-def basic_analysis_fallback(video_path):
-    if not os.path.exists(video_path):
-        return {
-            "wpm": 120,
-            "filler_count": 3,
-            "pause_count": 2,
-            "transcript": "Basic placeholder transcript for testing."
-        }, {
-            "eye_contact_percentage": 72,
-            "face_detected_ratio": 68
-        }
-
-    file_size = os.path.getsize(video_path)
-    file_seed = max(1, file_size // 1000)
-
-    fluency_data = {
-        "wpm": min(180, 120 + (file_seed % 30)),
-        "filler_count": 2 + (file_seed % 5),
-        "pause_count": 1 + (file_seed % 4),
-        "transcript": f"Basic placeholder transcript generated for {os.path.basename(video_path)}."
-    }
-
-    visual_data = {
-        "eye_contact_percentage": min(95, 70 + (file_seed % 20)),
-        "face_detected_ratio": min(100, 60 + (file_seed % 30))
-    }
-
-    return fluency_data, visual_data
 
 
 UPLOAD_FOLDER = "uploads"
@@ -90,7 +61,8 @@ initialize_database()
 def index():
 
     return render_template(
-        "index.html"
+        "index.html",
+        speaking_styles=SPEAKING_STYLES
     )
 
 
@@ -103,6 +75,14 @@ def index():
     methods=["POST"]
 )
 def upload():
+
+    speaking_style = request.form.get("speaking_style", "")
+    if speaking_style not in SPEAKING_STYLES:
+        return render_template(
+            "index.html",
+            speaking_styles=SPEAKING_STYLES,
+            error="Choose a speaking style before analyzing the video."
+        )
 
     uploaded_file = request.files.get(
         "video"
@@ -125,6 +105,7 @@ def upload():
 
         return render_template(
             "index.html",
+            speaking_styles=SPEAKING_STYLES,
             error="Please upload a video or enter a video URL."
         )
 
@@ -146,6 +127,7 @@ def upload():
 
             return render_template(
                 "index.html",
+                speaking_styles=SPEAKING_STYLES,
                 error=(
                     "Unsupported video format. "
                     "Use MP4, MOV, AVI, MKV or WebM."
@@ -177,6 +159,7 @@ def upload():
 
             return render_template(
                 "index.html",
+                speaking_styles=SPEAKING_STYLES,
                 error="Please enter a valid HTTP/HTTPS URL."
             )
 
@@ -199,6 +182,7 @@ def upload():
 
             return render_template(
                 "index.html",
+                speaking_styles=SPEAKING_STYLES,
                 error=f"Video download failed: {error}"
             )
 
@@ -218,6 +202,7 @@ def upload():
 
         return render_template(
             "index.html",
+            speaking_styles=SPEAKING_STYLES,
             error=f"Audio extraction failed: {error}"
         )
 
@@ -236,7 +221,23 @@ def upload():
         }
     except Exception as exc:
         print(f"Fluency analysis failed: {exc}")
-        fluency_data, _ = basic_analysis_fallback(video_path)
+        fluency_data = {
+            "wpm": 0,
+            "filler_count": 0,
+            "pause_count": 0,
+            "transcript": "Speech analysis unavailable."
+        }
+
+    try:
+        audio_delivery_data = analyze_audio_delivery(audio_path)
+    except Exception as exc:
+        print(f"Audio delivery analysis failed: {exc}")
+        audio_delivery_data = {
+            "pitch_range_semitones": 0,
+            "intensity_range_db": 0,
+            "pause_ratio": 0,
+            "long_pause_count": 0
+        }
 
 
     # =================================================
@@ -253,7 +254,10 @@ def upload():
         }
     except Exception as exc:
         print(f"Visual analysis failed: {exc}")
-        _, visual_data = basic_analysis_fallback(video_path)
+        visual_data = {
+            "eye_contact_percentage": 0,
+            "face_detected_ratio": 0
+        }
 
 
     # =================================================
@@ -262,7 +266,9 @@ def upload():
 
     processed_data = {
         "visual_metrics": visual_data,
-        "fluency_metrics": fluency_data
+        "fluency_metrics": fluency_data,
+        "audio_delivery_metrics": audio_delivery_data,
+        "speaking_style": speaking_style
     }
 
 
@@ -319,6 +325,22 @@ def upload():
         "transcript":
             fluency_data["transcript"],
 
+        "speaking_style": speaking_style,
+
+        "pitch_range_semitones": audio_delivery_data["pitch_range_semitones"],
+
+        "intensity_range_db": audio_delivery_data["intensity_range_db"],
+
+        "pause_ratio": audio_delivery_data["pause_ratio"],
+
+        "long_pause_count": audio_delivery_data["long_pause_count"],
+
+        "content_style_score": score_result["breakdown"]["content_style"],
+
+        "vocal_delivery_score": score_result["breakdown"]["vocal_delivery"],
+
+        "score_breakdown": score_result["breakdown"],
+
         "feedback":
             "\n".join(feedback)
 
@@ -341,6 +363,10 @@ def upload():
         data=processed_data,
 
         score=final_score,
+
+        score_breakdown=score_result["breakdown"],
+
+        speaking_style=SPEAKING_STYLES[speaking_style]["label"],
 
         feedback=feedback,
 

@@ -1,4 +1,5 @@
 import os
+import json
 import sqlite3
 
 import mysql.connector
@@ -15,6 +16,17 @@ MYSQL_CONFIG = {
 }
 
 SQLITE_PATH = "database/video_rating.db"
+
+SCORING_COLUMNS = {
+    "speaking_style": "VARCHAR(32)",
+    "pitch_range_semitones": "DOUBLE",
+    "intensity_range_db": "DOUBLE",
+    "pause_ratio": "DOUBLE",
+    "long_pause_count": "INT",
+    "content_style_score": "DOUBLE",
+    "vocal_delivery_score": "DOUBLE",
+    "score_breakdown": "TEXT",
+}
 
 
 def _mysql_is_available():
@@ -36,11 +48,31 @@ def get_connection():
     return connection
 
 
+def _ensure_scoring_columns(cursor, is_mysql):
+    if is_mysql:
+        cursor.execute("SHOW COLUMNS FROM submissions")
+        existing_columns = {row[0] for row in cursor.fetchall()}
+    else:
+        cursor.execute("PRAGMA table_info(submissions)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+
+    for column, column_type in SCORING_COLUMNS.items():
+        if column not in existing_columns:
+            if not is_mysql and column_type == "DOUBLE":
+                column_type = "REAL"
+            elif not is_mysql and column_type == "INT":
+                column_type = "INTEGER"
+            elif not is_mysql and column == "speaking_style":
+                column_type = "TEXT"
+            cursor.execute(f"ALTER TABLE submissions ADD COLUMN {column} {column_type}")
+
+
 def initialize_database():
     connection = get_connection()
     cursor = connection.cursor()
+    is_mysql = not isinstance(connection, sqlite3.Connection)
 
-    if _mysql_is_available():
+    if is_mysql:
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS submissions (
@@ -79,6 +111,7 @@ def initialize_database():
             """
         )
 
+    _ensure_scoring_columns(cursor, is_mysql)
     connection.commit()
     connection.close()
 
@@ -86,8 +119,9 @@ def initialize_database():
 def save_result(data):
     connection = get_connection()
     cursor = connection.cursor()
+    is_mysql = not isinstance(connection, sqlite3.Connection)
 
-    if _mysql_is_available():
+    if is_mysql:
         cursor.execute(
             """
             INSERT INTO submissions (
@@ -100,9 +134,17 @@ def save_result(data):
                 face_detected_ratio,
                 final_score,
                 transcript,
-                feedback
+                feedback,
+                speaking_style,
+                pitch_range_semitones,
+                intensity_range_db,
+                pause_ratio,
+                long_pause_count,
+                content_style_score,
+                vocal_delivery_score,
+                score_breakdown
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 data["video_filename"],
@@ -115,6 +157,14 @@ def save_result(data):
                 data["final_score"],
                 data["transcript"],
                 data["feedback"],
+                data["speaking_style"],
+                data["pitch_range_semitones"],
+                data["intensity_range_db"],
+                data["pause_ratio"],
+                data["long_pause_count"],
+                data["content_style_score"],
+                data["vocal_delivery_score"],
+                json.dumps(data["score_breakdown"]),
             ),
         )
         submission_id = cursor.lastrowid
@@ -131,9 +181,17 @@ def save_result(data):
                 face_detected_ratio,
                 final_score,
                 transcript,
-                feedback
+                feedback,
+                speaking_style,
+                pitch_range_semitones,
+                intensity_range_db,
+                pause_ratio,
+                long_pause_count,
+                content_style_score,
+                vocal_delivery_score,
+                score_breakdown
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data["video_filename"],
@@ -146,6 +204,14 @@ def save_result(data):
                 data["final_score"],
                 data["transcript"],
                 data["feedback"],
+                data["speaking_style"],
+                data["pitch_range_semitones"],
+                data["intensity_range_db"],
+                data["pause_ratio"],
+                data["long_pause_count"],
+                data["content_style_score"],
+                data["vocal_delivery_score"],
+                json.dumps(data["score_breakdown"]),
             ),
         )
         submission_id = cursor.lastrowid
