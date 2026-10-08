@@ -219,3 +219,68 @@ def save_result(data):
     connection.commit()
     connection.close()
     return submission_id
+
+
+def _result_as_dict(cursor, row, is_mysql):
+    if row is None:
+        return None
+    if not is_mysql:
+        return dict(row)
+    return dict(zip((column[0] for column in cursor.description), row))
+
+
+def get_recent_results(limit=30):
+    limit = max(1, min(int(limit), 100))
+    connection = get_connection()
+    cursor = connection.cursor()
+    is_mysql = not isinstance(connection, sqlite3.Connection)
+    placeholder = "%s" if is_mysql else "?"
+    try:
+        cursor.execute(
+            f"SELECT * FROM submissions ORDER BY id DESC LIMIT {placeholder}",
+            (limit,),
+        )
+        rows = cursor.fetchall()
+        return [_result_as_dict(cursor, row, is_mysql) for row in rows]
+    finally:
+        connection.close()
+
+
+def get_submission(submission_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    is_mysql = not isinstance(connection, sqlite3.Connection)
+    placeholder = "%s" if is_mysql else "?"
+    try:
+        cursor.execute(
+            f"SELECT * FROM submissions WHERE id = {placeholder}",
+            (submission_id,),
+        )
+        return _result_as_dict(cursor, cursor.fetchone(), is_mysql)
+    finally:
+        connection.close()
+
+
+def get_submission_summary():
+    connection = get_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*),
+                AVG(final_score),
+                AVG(eye_contact_percentage),
+                AVG(face_detected_ratio)
+            FROM submissions
+            """
+        )
+        total, average_score, average_eye_contact, average_face_presence = cursor.fetchone()
+        return {
+            "total_submissions": total or 0,
+            "average_score": round(average_score or 0, 1),
+            "average_eye_contact": round(average_eye_contact or 0, 1),
+            "average_face_presence": round(average_face_presence or 0, 1),
+        }
+    finally:
+        connection.close()

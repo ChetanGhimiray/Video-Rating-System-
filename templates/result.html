@@ -1,135 +1,37 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assessment Result</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f3f4f6;
-            margin: 0;
-            padding: 32px 20px;
-            color: #111827;
-        }
-        .card {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-        }
-        h1 {
-            margin-top: 0;
-        }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 18px;
-            margin: 24px 0;
-        }
-        .stat {
-            background: #eff6ff;
-            border-radius: 10px;
-            padding: 16px;
-        }
-        .label {
-            color: #475569;
-            font-size: 0.8rem;
-            margin-bottom: 6px;
-        }
-        .value {
-            font-size: 1.2rem;
-            font-weight: bold;
-        }
-        .section {
-            margin-top: 24px;
-        }
-        a {
-            display: inline-block;
-            margin-top: 24px;
-            text-decoration: none;
-            background: #2563eb;
-            color: white;
-            padding: 10px 16px;
-            border-radius: 8px;
-        }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>Analysis Result</h1>
+{% extends "base.html" %}
 
-        <div class="stats">
-            <div class="stat">
-                <div class="label">Submission ID</div>
-                <div class="value">{{ submission_id }}</div>
-            </div>
-            <div class="stat">
-                <div class="label">Final Score</div>
-                <div class="value">{{ score }}</div>
-            </div>
-            <div class="stat">
-                <div class="label">Speaking Style</div>
-                <div class="value">{{ speaking_style }}</div>
-            </div>
-            <div class="stat">
-                <div class="label">Video</div>
-                <div class="value">{{ video_filename }}</div>
-            </div>
-            <div class="stat">
-                <div class="label">Source</div>
-                <div class="value">{{ video_source }}</div>
-            </div>
-        </div>
+{% block title %}Review Complete | Voice / Frame{% endblock %}
 
-        <div class="section">
-            <h3>Score Breakdown</h3>
-            <p>Content/style is a transcript cue estimate, not an assessment of factual accuracy or assignment relevance. Voice measures are approximate and recording-dependent.</p>
-            <ul>
-                {% for category, points in score_breakdown.items() %}
-                    <li>{{ category.replace('_', ' ').title() }}: {{ points }} points</li>
-                {% endfor %}
-            </ul>
-        </div>
+{% block content %}
+<section class="result-heading">
+    <div><p class="eyebrow">REVIEW COMPLETE · SUBMISSION #{{ submission_id }}</p><h1>{{ video_filename }}</h1><p class="intro-copy">{{ speaking_style }} · {{ video_source }}</p></div>
+    <div class="score-lockup result-score"><span class="metric-label">FINAL SCORE</span><strong>{{ score }}<small> / 100</small></strong></div>
+</section>
 
-        <div class="section">
-            <h3>Fluency Metrics</h3>
-            <p>WPM: {{ data.fluency_metrics.wpm }}</p>
-            <p>Filler Count: {{ data.fluency_metrics.filler_count }}</p>
-            <p>Pause Count: {{ data.fluency_metrics.pause_count }}</p>
-            <p>Transcript: {{ data.fluency_metrics.transcript or 'No transcript available yet.' }}</p>
-        </div>
+<section class="metric-strip result-metrics" aria-label="Presentation metrics">
+    <div class="metric-item"><span class="metric-label">WORDS / MIN</span><strong>{{ data.fluency_metrics.wpm }}</strong></div>
+    <div class="metric-item"><span class="metric-label">FILLER WORDS</span><strong>{{ data.fluency_metrics.filler_count }}</strong></div>
+    <div class="metric-item"><span class="metric-label">EYE CONTACT</span><strong>{{ data.visual_metrics.eye_contact_percentage }}<small>%</small></strong></div>
+    <div class="metric-item"><span class="metric-label">FACE PRESENCE</span><strong>{{ data.visual_metrics.face_detected_ratio }}<small>%</small></strong></div>
+</section>
 
-        <div class="section">
-            <h3>Vocal Delivery</h3>
-            <p>Pitch variation: {{ data.audio_delivery_metrics.pitch_range_semitones }} semitones</p>
-            <p>Relative intensity variation: {{ data.audio_delivery_metrics.intensity_range_db }} dB</p>
-            <p>Internal pause ratio: {{ (data.audio_delivery_metrics.pause_ratio * 100)|round(1) }}%</p>
-            <p>Pauses over 0.3 seconds: {{ data.audio_delivery_metrics.long_pause_count }}</p>
-        </div>
-
-        <div class="section">
-            <h3>Visual Metrics</h3>
-            <p>Eye Contact: {{ data.visual_metrics.eye_contact_percentage }}</p>
-            <p>Face Detected Ratio: {{ data.visual_metrics.face_detected_ratio }}</p>
-        </div>
-
-        <div class="section">
-            <h3>Feedback</h3>
-            {% if feedback %}
-                <ul>
-                    {% for item in feedback %}
-                        <li>{{ item }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>No feedback generated yet.</p>
-            {% endif %}
-        </div>
-
-        <a href="/">Back to Home</a>
-    </div>
-</body>
-</html>
+<div class="detail-grid">
+    <section class="content-section detail-panel">
+        <div class="section-heading"><div><p class="eyebrow">SCORING</p><h2>Category breakdown</h2></div></div>
+        {% set category_maxima = {'content_style': 30, 'vocal_delivery': 25, 'pace': 15, 'fluency': 10, 'eye_contact': 18, 'face_presence': 2} %}
+        {% for category, points in score_breakdown.items() %}
+        <div class="score-row"><div><span>{{ category.replace('_', ' ').title() }}</span><strong>{{ points }} pts</strong></div><progress max="{{ category_maxima.get(category, 30) }}" value="{{ points }}">{{ points }}</progress></div>
+        {% endfor %}
+        <p class="muted-copy">Content/style reflects transcript cues, not factual accuracy or assignment relevance. Voice measures are approximate and recording-dependent.</p>
+        <h3 class="subsection-title">Vocal delivery</h3>
+        <div class="detail-facts"><span>Pitch variation <strong>{{ data.audio_delivery_metrics.pitch_range_semitones }} st</strong></span><span>Intensity variation <strong>{{ data.audio_delivery_metrics.intensity_range_db }} dB</strong></span><span>Pause ratio <strong>{{ (data.audio_delivery_metrics.pause_ratio * 100)|round(1) }}%</strong></span><span>Long pauses <strong>{{ data.audio_delivery_metrics.long_pause_count }}</strong></span></div>
+    </section>
+    <section class="content-section detail-panel">
+        <div class="section-heading"><div><p class="eyebrow">NOTES</p><h2>Feedback</h2></div></div>
+        {% if feedback %}<ul class="feedback-list">{% for item in feedback %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<p class="muted-copy">No feedback generated.</p>{% endif %}
+        <h3 class="subsection-title">Transcript</h3>
+        <p class="transcript-copy">{{ data.fluency_metrics.transcript or 'No transcript available.' }}</p>
+    </section>
+</div>
+<div class="page-actions"><a class="text-link" href="{{ url_for('overall') }}">All reviews <span aria-hidden="true">&#8594;</span></a><a class="button button-primary" href="{{ url_for('upload_page') }}">New review <span aria-hidden="true">&#43;</span></a></div>
+{% endblock %}

@@ -1,107 +1,43 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Rating System</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f7fb;
-            margin: 0;
-            padding: 0;
-            color: #1f2937;
-        }
-        .container {
-            max-width: 700px;
-            margin: 80px auto;
-            background: #ffffff;
-            border-radius: 14px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-            padding: 30px;
-        }
-        h1 {
-            margin-top: 0;
-            text-align: center;
-        }
-        .error {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #fca5a5;
-            padding: 12px 14px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-        label {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            font-weight: 600;
-        }
-        input,
-        select {
-            padding: 12px 14px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 1rem;
-            background: white;
-        }
-        .or {
-            text-align: center;
-            font-weight: 700;
-            color: #6b7280;
-        }
-        button {
-            padding: 12px 18px;
-            background: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #1d4ed8;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Video Rating System</h1>
+{% extends "base.html" %}
 
-        {% if error %}
-            <div class="error">{{ error }}</div>
-        {% endif %}
+{% block title %}Presentation Review{% endblock %}
 
-        <form action="/upload" method="post" enctype="multipart/form-data">
-            <label>
-                Upload a video
-                <input type="file" name="video" accept=".mp4,.mov,.avi,.mkv,.webm">
-            </label>
-
-            <div class="or">OR</div>
-
-            <label>
-                Video URL
-                <input type="url" name="video_url" placeholder="https://example.com/video.mp4">
-            </label>
-
-            <label>
-                Speaking style
-                <select name="speaking_style" required>
-                    {% for value, style in speaking_styles.items() %}
-                        <option value="{{ value }}" {% if value == 'conversational' %}selected{% endif %}>{{ style.label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-
-            <button type="submit">Analyze Video</button>
-        </form>
+{% block content %}
+<section class="page-intro home-intro">
+    <div>
+        <p class="eyebrow">PRESENTATION REVIEW</p>
+        <h1>Make the next take<br>your best one.</h1>
+        <p class="intro-copy">Review delivery, pacing, fluency, and camera presence across your recorded presentations.</p>
     </div>
-</body>
-</html>
+    <a class="button button-primary" href="{{ url_for('upload_page') }}">Start a review <span aria-hidden="true">&#8599;</span></a>
+</section>
+
+<section class="metric-strip" aria-label="Submission summary">
+    <div class="metric-item"><span class="metric-label">REVIEWS</span><strong>{{ summary.total_submissions }}</strong></div>
+    <div class="metric-item"><span class="metric-label">AVERAGE SCORE</span><strong>{{ summary.average_score }}<small> / 100</small></strong></div>
+    <div class="metric-item"><span class="metric-label">EYE CONTACT</span><strong>{{ summary.average_eye_contact }}<small>%</small></strong></div>
+    <div class="metric-item"><span class="metric-label">FACE PRESENCE</span><strong>{{ summary.average_face_presence }}<small>%</small></strong></div>
+</section>
+
+<section class="content-section">
+    <div class="section-heading">
+        <div><p class="eyebrow">YOUR WORK</p><h2>Recent reviews</h2></div>
+        <a class="text-link" href="{{ url_for('overall') }}">All reviews <span aria-hidden="true">&#8594;</span></a>
+    </div>
+    {% if recent_submissions %}
+    <div class="submission-list">
+        {% for submission in recent_submissions %}
+        <a class="submission-row" href="{{ url_for('student', submission_id=submission.id) }}">
+            <span class="submission-index">{{ "%02d"|format(loop.index) }}</span>
+            <span class="submission-name"><strong>{{ submission.video_filename }}</strong><small>{{ submission.created_at or 'Date unavailable' }}</small></span>
+            <span class="submission-style">{{ submission.speaking_style or 'Review' }}</span>
+            <span class="submission-score">{{ submission.final_score or 0 }}<small> / 100</small></span>
+            <span class="row-arrow" aria-hidden="true">&#8599;</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"><p>No reviews yet.</p><a class="text-link" href="{{ url_for('upload_page') }}">Create your first review <span aria-hidden="true">&#8594;</span></a></div>
+    {% endif %}
+</section>
+{% endblock %}

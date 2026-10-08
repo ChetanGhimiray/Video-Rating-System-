@@ -4,6 +4,7 @@ from flask import (
     render_template
 )
 
+import json
 import os
 
 from input import (
@@ -24,7 +25,10 @@ from backend.scoring import calculate_scores, SPEAKING_STYLES
 
 from database.db import (
     initialize_database,
-    save_result
+    save_result,
+    get_recent_results,
+    get_submission,
+    get_submission_summary,
 )
 
 
@@ -62,8 +66,42 @@ def index():
 
     return render_template(
         "index.html",
-        speaking_styles=SPEAKING_STYLES
+        summary=get_submission_summary(),
+        recent_submissions=get_recent_results(5),
     )
+
+
+@app.route("/upload", methods=["GET"])
+def upload_page():
+    return render_template(
+        "upload.html",
+        speaking_styles=SPEAKING_STYLES,
+    )
+
+
+@app.route("/overall")
+def overall():
+    return render_template(
+        "overall.html",
+        submissions=get_recent_results(),
+        summary=get_submission_summary(),
+    )
+
+
+@app.route("/student/<int:submission_id>")
+def student(submission_id):
+    submission = get_submission(submission_id)
+    if submission is None:
+        return render_template("student.html", submission=None), 404
+    style_key = submission.get("speaking_style")
+    submission["speaking_style_label"] = SPEAKING_STYLES.get(
+        style_key, {"label": style_key or "Not recorded"}
+    )["label"]
+    try:
+        submission["score_breakdown"] = json.loads(submission.get("score_breakdown") or "{}")
+    except (TypeError, ValueError):
+        submission["score_breakdown"] = {}
+    return render_template("student.html", submission=submission)
 
 
 # --------------------------------------------------
@@ -79,7 +117,7 @@ def upload():
     speaking_style = request.form.get("speaking_style", "")
     if speaking_style not in SPEAKING_STYLES:
         return render_template(
-            "index.html",
+            "upload.html",
             speaking_styles=SPEAKING_STYLES,
             error="Choose a speaking style before analyzing the video."
         )
@@ -104,7 +142,7 @@ def upload():
     ) and not video_url:
 
         return render_template(
-            "index.html",
+            "upload.html",
             speaking_styles=SPEAKING_STYLES,
             error="Please upload a video or enter a video URL."
         )
@@ -126,7 +164,7 @@ def upload():
         if not allowed_file(filename):
 
             return render_template(
-                "index.html",
+                "upload.html",
                 speaking_styles=SPEAKING_STYLES,
                 error=(
                     "Unsupported video format. "
@@ -158,7 +196,7 @@ def upload():
         if not is_url(video_url):
 
             return render_template(
-                "index.html",
+                "upload.html",
                 speaking_styles=SPEAKING_STYLES,
                 error="Please enter a valid HTTP/HTTPS URL."
             )
@@ -181,7 +219,7 @@ def upload():
         except Exception as error:
 
             return render_template(
-                "index.html",
+                "upload.html",
                 speaking_styles=SPEAKING_STYLES,
                 error=f"Video download failed: {error}"
             )
@@ -201,7 +239,7 @@ def upload():
     except Exception as error:
 
         return render_template(
-            "index.html",
+            "upload.html",
             speaking_styles=SPEAKING_STYLES,
             error=f"Audio extraction failed: {error}"
         )
@@ -244,20 +282,21 @@ def upload():
     # MEMBER 2 - EYE CONTACT & SPEAKER PRESENCE
     # =================================================
 
+    visual_data = {
+        "eye_contact_percentage": 0,
+        "face_detected_ratio": 0
+    }
     try:
         eye_result = analyze_eye_contact(video_path)
-        speaker_result = recognize_speaker(video_path)
-
-        visual_data = {
-            "eye_contact_percentage": eye_result.get("eye_contact_percentage", 0),
-            "face_detected_ratio": speaker_result.get("face_detected_ratio", 0)
-        }
+        visual_data["eye_contact_percentage"] = eye_result.get("eye_contact_percentage", 0)
     except Exception as exc:
-        print(f"Visual analysis failed: {exc}")
-        visual_data = {
-            "eye_contact_percentage": 0,
-            "face_detected_ratio": 0
-        }
+        print(f"Eye contact analysis failed: {exc}")
+
+    try:
+        speaker_result = recognize_speaker(video_path)
+        visual_data["face_detected_ratio"] = speaker_result.get("face_detected_ratio", 0)
+    except Exception as exc:
+        print(f"Face presence analysis failed: {exc}")
 
 
     # =================================================
